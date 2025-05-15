@@ -91,25 +91,19 @@ export function ImageSelectionDialog({
     
     try {
       const result = await fetchPixabayImages({ query: searchTerm, count: 6 });
-      if (result.images.length === 0 && process.env.NEXT_PUBLIC_PIXABAY_API_KEY) {
+      if (result.images.length === 0) {
         toast({
-          title: "이미지 없음",
-          description: `"${searchTerm}" 관련 이미지를 Pixabay에서 찾을 수 없습니다. 다른 키워드로 시도해보세요.`,
-          variant: "default",
-        });
-      } else if (result.images.length === 0 && !process.env.NEXT_PUBLIC_PIXABAY_API_KEY) {
-         toast({
-          title: "API 키 필요",
-          description: `Pixabay 이미지를 로드하려면 .env 파일에 NEXT_PUBLIC_PIXABAY_API_KEY 를 설정해야 합니다. 현재 키가 없어 이미지를 가져올 수 없습니다.`,
-          variant: "destructive",
+          title: "이미지 검색 결과 없음",
+          description: `"${searchTerm}"에 대한 이미지를 찾을 수 없거나 Pixabay API 키가 서버에 설정되지 않았을 수 있습니다. 검색어를 다시 확인하시거나, .env 파일에 PIXABAY_API_KEY가 올바르게 설정되었는지 확인해주세요. (서버 로그에서 API 키 관련 오류를 찾아볼 수 있습니다.)`,
+          variant: "default", 
         });
       }
       setFetchedImages(result.images);
     } catch (error) {
-      console.error("Error fetching Pixabay images:", error);
+      console.error("Error fetching Pixabay images in dialog:", error);
       toast({
-        title: "이미지 로드 오류",
-        description: "Pixabay 이미지를 가져오는 중 오류가 발생했습니다. API키 또는 네트워크 연결을 확인해주세요.",
+        title: "이미지 로드 중 오류 발생",
+        description: "Pixabay 이미지를 가져오는 중 문제가 발생했습니다. 서버 로그를 확인하거나 잠시 후 다시 시도해주세요.",
         variant: "destructive",
       });
       setFetchedImages([]);
@@ -122,12 +116,13 @@ export function ImageSelectionDialog({
     if (isOpen) {
       const initialQuery = selectedKeyword || "";
       setCustomSearchQuery(initialQuery); 
-      if (initialQuery.trim() !== "") {
-        // loadImages(initialQuery); // Optionally auto-search on open, currently disabled. User must click search.
-      } else {
-        setFetchedImages([]);
-        setActiveSearchTerm(null);
-      }
+      // Reset previous search results when dialog opens with a new keyword or no keyword
+      setFetchedImages([]);
+      setActiveSearchTerm(null); 
+      // User must click search button, auto-search on open is disabled.
+      // if (initialQuery.trim() !== "") {
+      //   loadImages(initialQuery); 
+      // }
     } else {
       // Reset states when dialog closes
       setFetchedImages([]);
@@ -137,7 +132,7 @@ export function ImageSelectionDialog({
       setCustomSearchQuery("");
       setActiveSearchTerm(null);
     }
-  }, [isOpen, selectedKeyword]);
+  }, [isOpen, selectedKeyword]); // loadImages removed from dep array as it's manually called
 
   const handleImageSelect = (image: PixabayImage) => {
     setSelectedImageUrl(image.webformatURL); 
@@ -213,7 +208,6 @@ export function ImageSelectionDialog({
           </DialogDescription>
         </DialogHeader>
         
-        {/* Custom search input and button */}
         <div className="flex items-center gap-2 my-4">
           <Input 
             type="text"
@@ -241,8 +235,7 @@ export function ImageSelectionDialog({
                 <AlertTitle>이미지를 찾을 수 없음</AlertTitle>
                 <AlertDescription>
                   "{activeSearchTerm}"에 대한 이미지를 Pixabay에서 찾을 수 없었습니다.
-                  다른 키워드로 시도해보거나, Pixabay API 키가 `.env` 파일에 `NEXT_PUBLIC_PIXABAY_API_KEY`로 올바르게 설정되었는지 확인해주세요.
-                  (API 키가 설정되어 있어도 해당 키워드의 이미지가 없을 수 있습니다.)
+                  다른 키워드로 시도해보거나, Pixabay API 키가 `.env` 파일에 `PIXABAY_API_KEY`로 올바르게 설정되었는지 서버 로그와 함께 확인해주세요.
                 </AlertDescription>
               </Alert>
             )}
@@ -252,7 +245,7 @@ export function ImageSelectionDialog({
                     <AlertTitle>검색 시작</AlertTitle>
                     <AlertDescription>
                     위 입력창에 키워드를 입력하고 검색 버튼을 누르세요. 
-                    Pixabay API 키가 `.env` 파일에 `NEXT_PUBLIC_PIXABAY_API_KEY`로 설정되어 있어야 합니다.
+                    Pixabay API 키가 `.env` 파일에 `PIXABAY_API_KEY`로 (서버 측에) 설정되어 있어야 합니다.
                     </AlertDescription>
                 </Alert>
             )}
@@ -263,10 +256,10 @@ export function ImageSelectionDialog({
                     key={img.id}
                     className="cursor-pointer border-2 border-transparent hover:border-primary rounded-lg overflow-hidden shadow-md transition-all duration-200 aspect-video group relative bg-background"
                     onClick={() => handleImageSelect(img)}
-                    data-ai-hint={img.tags.split(',')[0] || aiHintForInsertion} // Use first tag for hint
+                    data-ai-hint={img.tags.split(',')[0] || aiHintForInsertion} 
                   >
                     <Image
-                      src={img.previewURL || img.webformatURL} // Prefer previewURL for grid
+                      src={img.previewURL || img.webformatURL} 
                       alt={img.tags || `Pixabay image for ${activeSearchTerm || 'search'}`}
                       layout="fill"
                       objectFit="cover"
@@ -281,7 +274,6 @@ export function ImageSelectionDialog({
             </ScrollArea>
           </>
         ) : (
-          // Image selected, show preview and section selection for insertion
           <div className="p-4 space-y-4 h-[300px] flex flex-col justify-center">
             <Alert variant="default" className="bg-secondary text-secondary-foreground border-primary/50">
               <CheckCircle className="h-5 w-5 text-primary" />
@@ -293,7 +285,7 @@ export function ImageSelectionDialog({
             </Alert>
             <div className="flex justify-center items-center max-h-[150px]">
               <Image
-                src={selectedImageUrl} // Use webformatURL for better quality preview if selected
+                src={selectedImageUrl} 
                 alt={selectedImageAlt} 
                 width={250}
                 height={150}
@@ -331,14 +323,13 @@ export function ImageSelectionDialog({
         )}
 
         <DialogFooter className="sm:justify-between mt-4 pt-4 border-t">
-            {selectedImageUrl && ( // Show "Select Another Image" only if an image is selected
-                 <Button variant="outline" onClick={() => {setSelectedImageUrl(null); setSelectedImageAlt(""); /* Keep customSearchQuery */ }} className="mb-2 sm:mb-0">
+            {selectedImageUrl && ( 
+                 <Button variant="outline" onClick={() => {setSelectedImageUrl(null); setSelectedImageAlt(""); }} className="mb-2 sm:mb-0">
                     다른 사진 선택
                 </Button>
             )}
-           {/* Conditional Spacer or reload button */}
-           {!selectedImageUrl && fetchedImages.length > 0 && <div className="hidden sm:block" /> /* Spacer */}
-           {!selectedImageUrl && (fetchedImages.length === 0 && !isLoadingImages) && ( // Show reload if no images and not loading
+           {!selectedImageUrl && fetchedImages.length > 0 && <div className="hidden sm:block" /> }
+           {!selectedImageUrl && (fetchedImages.length === 0 && !isLoadingImages) && ( 
              <Button variant="outline" onClick={() => loadImages(customSearchQuery || selectedKeyword || undefined)} className="mb-2 sm:mb-0">
                 이미지 다시 로드
             </Button>
