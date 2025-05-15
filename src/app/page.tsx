@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,10 +21,36 @@ const MOCK_KEYWORDS = [
 
 export type ContentFormat = 'markdown' | 'html';
 
+// Helper function to get AI hint from keyword
+const getAiHintFromKeyword = (keyword: string | null): string => {
+  if (!keyword) return "image";
+  return keyword.split(" ").slice(0, 2).join(" ");
+};
+
+// Conversion functions for image tags
+const convertMarkdownImagesToHtml = (markdown: string, hintKeyword: string | null): string => {
+  const aiHint = getAiHintFromKeyword(hintKeyword);
+  return markdown.replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, src) => {
+    // Check if the image is already an HTML tag (e.g. from a previous conversion or direct input)
+    // This simple check might not be foolproof for complex mixed content.
+    if (src.startsWith('data:image') || src.startsWith('http')) { // Simple check for typical image URLs
+         return `<img src="${src}" alt="${alt}" data-ai-hint="${aiHint}" style="max-width: 100%; height: auto; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />`;
+    }
+    return match; // Return original if it doesn't look like a standard MD image link
+  });
+};
+
+const convertHtmlImagesToMarkdown = (html: string): string => {
+  return html.replace(/<img .*?src=["'](.*?)["'].*?alt=["'](.*?)["'].*?(?:data-ai-hint=["'](.*?)["'])?.*?>/gi, (match, src, alt) => {
+    return `![${alt}](${src})`;
+  });
+};
+
+
 export default function NewsBlogifyPage() {
   const [keywords, setKeywords] = useState<string[]>([]);
   const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
-  const [blogContent, setBlogContent] = useState<string>("");
+  const [blogContent, setBlogContent] = useState<string>(""); // Stores the authoritative version of the content
   const [contentFormat, setContentFormat] = useState<ContentFormat>('markdown');
   
   const [isLoadingKeywords, setIsLoadingKeywords] = useState<boolean>(false);
@@ -48,10 +74,14 @@ export default function NewsBlogifyPage() {
   const handleKeywordSelect = async (keyword: string) => {
     setSelectedKeyword(keyword);
     setIsLoadingDraft(true);
-    setBlogContent(""); // Clear previous content
+    setBlogContent(""); 
+    // Ensure content is treated as Markdown initially after generation
+    if (contentFormat === 'html') {
+      setContentFormat('markdown'); // Switch to Markdown for new draft
+    }
     try {
       const result = await generateBlogDraft({ keyword });
-      setBlogContent(result.draft);
+      setBlogContent(result.draft); // AI generates Markdown
       toast({ title: "블로그 초안 생성 완료", description: `"${keyword}"에 대한 초안이 생성되었습니다.`, variant: "default" });
     } catch (error) {
       console.error("Error generating blog draft:", error);
@@ -68,9 +98,21 @@ export default function NewsBlogifyPage() {
       return;
     }
     setIsLoadingElaboration(true);
+    
+    let contentToElaborate = blogContent;
+    if (contentFormat === 'html') {
+      contentToElaborate = convertHtmlImagesToMarkdown(blogContent);
+    }
+
     try {
-      const result = await elaborateBlogContent({ draft: blogContent });
-      setBlogContent(result.elaboratedContent);
+      const result = await elaborateBlogContent({ draft: contentToElaborate });
+      // AI elaborates on Markdown, result is Markdown
+      let newContent = result.elaboratedContent;
+      if (contentFormat === 'html') {
+        // If user is in HTML mode, convert the new Markdown from AI to HTML for display
+        newContent = convertMarkdownImagesToHtml(newContent, selectedKeyword);
+      }
+      setBlogContent(newContent);
       toast({ title: "상세 내용 생성 완료", description: "블로그 내용이 상세화되었습니다.", variant: "default" });
     } catch (error) {
       console.error("Error elaborating content:", error);
@@ -81,9 +123,21 @@ export default function NewsBlogifyPage() {
   };
 
   const handleImageInsert = (updatedContent: string) => {
-    setBlogContent(updatedContent);
+    setBlogContent(updatedContent); // ImageSelectionDialog provides content in the correct format
     toast({ title: "사진 삽입 완료", description: "선택한 사진이 블로그 내용에 추가되었습니다." });
   };
+
+  const handleFormatChange = useCallback((newFormat: ContentFormat) => {
+    if (newFormat === contentFormat || isLoadingDraft || isLoadingElaboration) return;
+
+    if (newFormat === 'html') {
+      setBlogContent(prevContent => convertMarkdownImagesToHtml(prevContent, selectedKeyword));
+    } else { // Switching to Markdown
+      setBlogContent(prevContent => convertHtmlImagesToMarkdown(prevContent));
+    }
+    setContentFormat(newFormat);
+  }, [contentFormat, selectedKeyword, isLoadingDraft, isLoadingElaboration]);
+
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center p-4 md:p-8 font-sans">
@@ -92,7 +146,7 @@ export default function NewsBlogifyPage() {
           <Bot size={48} /> NewsBlogify
         </h1>
         <p className="text-muted-foreground mt-2 text-lg">
-          오늘의 핫 키워드로 손쉽게 블로그 포스트를 작성하세요.
+          오늘의 핫 키워드로 손쉽게 블로그 포스트를 작성하세요. 기사 기반 초안 생성 및 형식 변환 기능 제공!
         </p>
       </header>
 
@@ -105,7 +159,7 @@ export default function NewsBlogifyPage() {
                 오늘의 핫 키워드
               </CardTitle>
               <CardDescription>
-                가장 인기있는 뉴스 키워드 10개를 확인하고 블로그 작성을 시작하세요.
+                가장 인기있는 뉴스 키워드 10개를 확인하고 블로그 작성을 시작하세요. 선택한 키워드 관련 기사를 기반으로 초안이 작성됩니다.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -156,7 +210,7 @@ export default function NewsBlogifyPage() {
                   id="content-format"
                   orientation="horizontal"
                   value={contentFormat}
-                  onValueChange={(value: string) => setContentFormat(value as ContentFormat)}
+                  onValueChange={(value: string) => handleFormatChange(value as ContentFormat)}
                   className="flex items-center"
                 >
                   <div className="flex items-center space-x-2">
@@ -218,7 +272,7 @@ export default function NewsBlogifyPage() {
             <Bot className="h-5 w-5 text-primary" />
             <AlertTitle className="font-semibold text-primary">AI 지원 기능</AlertTitle>
             <AlertDescription className="text-muted-foreground">
-              "상세 내용 만들기"는 AI를 사용하여 현재 초안을 더 풍부하게 만듭니다. "사진 추가"를 통해 내용에 이미지를 삽입할 수 있습니다. 선택한 콘텐츠 형식(마크다운/HTML)에 따라 이미지 태그가 다르게 삽입됩니다. (현재는 Placeholder 이미지만 제공됩니다.)
+              "상세 내용 만들기"는 AI를 사용하여 현재 초안을 더 풍부하게 만듭니다. "사진 추가"를 통해 내용에 이미지를 삽입할 수 있습니다. 선택한 콘텐츠 형식(마크다운/HTML)에 따라 이미지 태그가 다르게 삽입되며, 형식 변경 시 내용의 이미지 태그도 변환됩니다. (현재는 Placeholder 이미지만 제공됩니다.)
             </AlertDescription>
           </Alert>
       </main>
@@ -226,7 +280,7 @@ export default function NewsBlogifyPage() {
       <ImageSelectionDialog
         isOpen={showImageDialog}
         onClose={() => setShowImageDialog(false)}
-        currentContent={blogContent}
+        currentContent={blogContent} // Pass current blogContent
         onImageInsert={handleImageInsert}
         selectedKeyword={selectedKeyword}
         contentFormat={contentFormat}
