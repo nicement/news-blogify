@@ -65,8 +65,8 @@ export function ImageSelectionDialog({
       const size = 300 + i * 20; // Vary image sizes slightly
       return {
         src: `https://placehold.co/${size}x${size}.png`,
-        alt: `Placeholder image ${i + 1}`,
-        aiHint: aiHint // Each image will carry the general aiHint
+        alt: `Placeholder for ${aiHint} ${i + 1}`, // Updated alt text
+        aiHint: aiHint
       };
     });
   }, [aiHint]);
@@ -82,13 +82,13 @@ export function ImageSelectionDialog({
       return; 
     }
     
-    const altText = selectedKeyword || "image";
+    const altTextForInsertion = selectedKeyword || "image"; // Alt text for the image tag being inserted
     let imageTag = "";
 
     if (contentFormat === 'html') {
-      imageTag = `\n\n<img src="${selectedImageUrl}" alt="${altText}" data-ai-hint="${aiHint}" style="max-width: 100%; height: auto; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />\n\n`;
+      imageTag = `\n\n<img src="${selectedImageUrl}" alt="${altTextForInsertion}" data-ai-hint="${aiHint}" style="max-width: 100%; height: auto; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />\n\n`;
     } else { // Default to markdown
-      imageTag = `\n\n![${altText}](${selectedImageUrl})\n\n`;
+      imageTag = `\n\n![${altTextForInsertion}](${selectedImageUrl})\n\n`;
     }
     
     const updatedSections = blogSections.map((section, index) => {
@@ -129,7 +129,7 @@ export function ImageSelectionDialog({
                 >
                   <Image
                     src={img.src}
-                    alt={img.alt}
+                    alt={img.alt} // Alt text now reflects aiHint
                     width={200}
                     height={200}
                     className="object-cover w-full h-full aspect-square"
@@ -149,11 +149,11 @@ export function ImageSelectionDialog({
             </Alert>
             <Image
               src={selectedImageUrl}
-              alt="Selected image"
+              alt="Selected image" // This alt is for the selected image preview
               width={150}
               height={150}
               className="rounded-md border shadow-md mx-auto"
-              data-ai-hint={aiHint}
+              data-ai-hint={aiHint} // Keep ai-hint on the preview too
             />
             
             {blogSections.length > 0 ? (
