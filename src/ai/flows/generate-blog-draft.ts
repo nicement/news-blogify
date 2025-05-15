@@ -2,11 +2,11 @@
 'use server';
 
 /**
- * @fileOverview This flow generates a blog post draft based on a given keyword.
- * It first generates a mock news article related to the keyword,
- * then uses that article to create the blog draft.
+ * @fileOverview This flow generates a blog post draft based on the content of a given news article URL.
+ * It first generates a mock "original article text" based on the keyword/title,
+ * then uses that generated text to create the blog draft.
  *
- * - generateBlogDraft - A function that generates a blog draft based on the keyword.
+ * - generateBlogDraft - A function that generates a blog draft based on the article URL and keyword.
  * - GenerateBlogDraftInput - The input type for the generateBlogDraft function.
  * - GenerateBlogDraftOutput - The return type for the generateBlogDraft function.
  */
@@ -15,16 +15,15 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const GenerateBlogDraftInputSchema = z.object({
-  keyword: z.string().describe('The keyword for which to generate the blog draft.'),
+  keyword: z.string().describe('The keyword or article title to base the mock article and blog draft on.'),
+  articleUrl: z.string().url().describe('The URL of the news article (used for context, actual content is mocked).'),
 });
 export type GenerateBlogDraftInput = z.infer<typeof GenerateBlogDraftInputSchema>;
 
-const MockArticleOutputSchema = z.object({
-  articleContent: z.string().describe('A mock news article body based on the keyword, simulating the original article from which the keyword might have been extracted.'),
-});
-
 const GenerateBlogDraftOutputSchema = z.object({
-  draft: z.string().describe('The generated blog draft based on the article.'),
+  draft: z.string().describe('The generated blog draft based on the mocked article content.'),
+  sourceArticleTitle: z.string().describe('The title used or derived for the source article.'),
+  mockArticleContent: z.string().describe('The generated mock article content used as a basis for the draft.')
 });
 export type GenerateBlogDraftOutput = z.infer<typeof GenerateBlogDraftOutputSchema>;
 
@@ -34,26 +33,33 @@ export async function generateBlogDraft(input: GenerateBlogDraftInput): Promise<
 
 const generateMockArticlePrompt = ai.definePrompt({
   name: 'generateMockArticlePrompt',
-  input: {schema: GenerateBlogDraftInputSchema},
-  output: {schema: MockArticleOutputSchema},
-  prompt: `당신은 "{{keyword}}"라는 키워드가 특정 뉴스 기사에서 추출되었다고 가정합니다. 당신의 임무는 이 키워드만을 바탕으로 해당 원본 뉴스 기사가 어떤 내용이었을지 상세하고 사실적인 뉴스 기사 본문 형식으로 한국어로 재구성하는 것입니다. 단순 요약이 아니라, 실제 기사 본문처럼 작성해주세요. 이 내용은 블로그 게시물 작성의 기초 자료로 사용될 것입니다.`,
+  input: { schema: GenerateBlogDraftInputSchema.pick({ keyword: true }) },
+  output: { schema: z.object({
+    mockArticleContent: z.string().describe('A realistic-sounding, detailed news article body text in Korean, based on the provided keyword/title. This should read like the original source text from which the keyword was extracted.'),
+    retrievedArticleTitle: z.string().describe('The article title, confirmed or refined based on the keyword.')
+  })},
+  prompt: `주어진 키워드/기사 제목을 바탕으로, 해당 키워드가 추출되었을 법한 원본 뉴스 기사 본문 내용을 한국어로 상세하고 사실적으로 작성해주세요. 독자가 실제 기사를 읽는 것처럼 느껴지도록 해야 합니다.
+
+뉴스 기사 제목/키워드: {{{keyword}}}
+
+생성된 기사 본문 (한국어):
+`,
 });
+
 
 const generateBlogDraftPrompt = ai.definePrompt({
   name: 'generateBlogDraftPrompt',
   input: {schema: z.object({
-    keyword: z.string().describe('The original keyword for context.'),
-    articleContent: z.string().describe('The content of the news article (simulated original text) to base the blog post on.'),
+    retrievedArticleTitle: z.string().describe('The title of the news article used as a source.'),
+    articleContent: z.string().describe('The full text content of the news article to base the blog post on.'),
   })},
-  output: {schema: GenerateBlogDraftOutputSchema},
-  prompt: `다음 뉴스 기사 내용과 키워드를 바탕으로 잘 구조화되고 흥미로운 블로그 게시물 초안을 한국어로 작성해주세요:
+  output: {schema: GenerateBlogDraftOutputSchema.pick({ draft: true })},
+  prompt: `다음은 "{{{retrievedArticleTitle}}}"라는 제목의 뉴스 기사 원문입니다. 이 내용을 바탕으로, 독자들이 흥미를 느낄 만한 블로그 게시물 초안을 한국어로 작성해주세요. 기사의 핵심 내용을 잘 반영하되, 블로그 형식에 맞게 자연스럽게 재구성하고, 서론, 본론, 결론의 구조를 갖추도록 합니다.
 
-키워드: {{{keyword}}}
-
-뉴스 기사 내용:
+뉴스 기사 원문 내용:
 {{{articleContent}}}
 
-블로그 초안:
+블로그 초안 (마크다운 형식, 한국어):
 `,
 });
 
@@ -64,21 +70,34 @@ const generateBlogDraftFlow = ai.defineFlow(
     outputSchema: GenerateBlogDraftOutputSchema,
   },
   async (input) => {
-    // Step 1: Generate a mock news article (simulating original text) based on the keyword
-    const mockArticleResponse = await generateMockArticlePrompt(input);
-    const articleContent = mockArticleResponse.output?.articleContent;
+    console.log(`Generating mock article and blog draft for keyword: ${input.keyword} (URL: ${input.articleUrl})`);
 
-    if (!articleContent) {
+    // Step 1: Generate mock article content based on the keyword
+    const mockArticleResponse = await generateMockArticlePrompt({ keyword: input.keyword });
+    
+    if (!mockArticleResponse.output?.mockArticleContent || !mockArticleResponse.output?.retrievedArticleTitle) {
       throw new Error('Failed to generate mock article content.');
     }
+    const { mockArticleContent, retrievedArticleTitle } = mockArticleResponse.output;
 
-    // Step 2: Generate the blog draft based on the mock article and keyword
+    console.log(`Generated mock article title: ${retrievedArticleTitle}`);
+    // console.log(`Generated mock article content (first 100 chars): ${mockArticleContent.substring(0,100)}...`);
+
+
+    // Step 2: Generate blog draft based on the mock article content
     const blogDraftResponse = await generateBlogDraftPrompt({
-      keyword: input.keyword,
-      articleContent: articleContent,
+      retrievedArticleTitle: retrievedArticleTitle,
+      articleContent: mockArticleContent,
     });
     
-    return blogDraftResponse.output!;
+    if (!blogDraftResponse.output?.draft) {
+        throw new Error('Failed to generate blog draft from the mock article.');
+    }
+
+    return {
+        draft: blogDraftResponse.output.draft,
+        sourceArticleTitle: retrievedArticleTitle,
+        mockArticleContent: mockArticleContent, // Also returning the mock article for transparency if needed
+    };
   }
 );
-

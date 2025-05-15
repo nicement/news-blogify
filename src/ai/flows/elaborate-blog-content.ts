@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Elaborates on a draft blog post using the Gemini API.
@@ -28,7 +29,13 @@ const prompt = ai.definePrompt({
   name: 'elaborateBlogContentPrompt',
   input: {schema: ElaborateBlogContentInputSchema},
   output: {schema: ElaborateBlogContentOutputSchema},
-  prompt: `You are an expert blog writer. Please elaborate on the following draft blog post in Korean to make it more detailed and engaging:\n\n{{{draft}}}`,
+  prompt: `You are an expert blog writer. Please elaborate on the following draft blog post in Korean to make it more detailed, engaging, and well-structured. Add more depth, examples, or explanations where appropriate, while maintaining the core message of the draft. Ensure the output is in Markdown format.
+
+Draft Blog Post:
+{{{draft}}}
+
+Elaborated Blog Post (Markdown, Korean):
+`,
 });
 
 const elaborateBlogContentFlow = ai.defineFlow(
