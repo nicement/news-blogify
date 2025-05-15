@@ -13,13 +13,6 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -29,6 +22,7 @@ import type { ContentFormat } from "@/app/page";
 import { fetchPixabayImages } from "@/ai/flows/fetch-pixabay-images";
 import type { PixabayImage } from "@/ai/flows/fetch-pixabay-images";
 import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface ImageSelectionDialogProps {
   isOpen: boolean;
@@ -72,18 +66,18 @@ export function ImageSelectionDialog({
     return term.split(" ").slice(0, 2).join(" ");
   }, [activeSearchTerm, selectedImageAlt]);
 
-  const loadImages = useCallback(async (queryOverride?: string) => {
+  const loadImages = useCallback(async (queryToSearch?: string) => {
     if (!isOpen) {
       setFetchedImages([]);
       return;
     }
 
-    const searchTerm = queryOverride !== undefined ? queryOverride : (customSearchQuery.trim() || selectedKeyword);
+    const searchTerm = queryToSearch?.trim();
 
-    if (!searchTerm || searchTerm.trim() === "") {
+    if (!searchTerm || searchTerm === "") {
       toast({
         title: "검색어 필요",
-        description: "이미지를 검색할 키워드가 없습니다. 블로그 키워드를 사용하거나 검색어를 직접 입력해주세요.",
+        description: "이미지를 검색할 키워드를 입력해주세요.",
         variant: "destructive",
       });
       setFetchedImages([]);
@@ -93,14 +87,14 @@ export function ImageSelectionDialog({
 
     setIsLoadingImages(true);
     setSelectedImageUrl(null); 
-    setActiveSearchTerm(searchTerm.trim());
+    setActiveSearchTerm(searchTerm);
     
     try {
-      const result = await fetchPixabayImages({ query: searchTerm.trim(), count: 6 });
+      const result = await fetchPixabayImages({ query: searchTerm, count: 6 });
       if (result.images.length === 0 && process.env.NEXT_PUBLIC_PIXABAY_API_KEY) {
         toast({
           title: "이미지 없음",
-          description: `"${searchTerm.trim()}" 관련 이미지를 Pixabay에서 찾을 수 없습니다. 다른 키워드로 시도해보세요.`,
+          description: `"${searchTerm}" 관련 이미지를 Pixabay에서 찾을 수 없습니다. 다른 키워드로 시도해보세요.`,
           variant: "default",
         });
       } else if (result.images.length === 0 && !process.env.NEXT_PUBLIC_PIXABAY_API_KEY) {
@@ -122,16 +116,15 @@ export function ImageSelectionDialog({
     } finally {
       setIsLoadingImages(false);
     }
-  }, [isOpen, selectedKeyword, toast, customSearchQuery]);
+  }, [isOpen, toast]);
 
   useEffect(() => {
     if (isOpen) {
       const initialQuery = selectedKeyword || "";
-      setCustomSearchQuery(initialQuery); // Set customSearchQuery to the main blog keyword initially
+      setCustomSearchQuery(initialQuery); 
       if (initialQuery.trim() !== "") {
-        loadImages(initialQuery); // Load images based on the main blog keyword when dialog opens
+        // loadImages(initialQuery); // Optionally auto-search on open, currently disabled. User must click search.
       } else {
-        // If no selectedKeyword, don't auto-search, clear previous results.
         setFetchedImages([]);
         setActiveSearchTerm(null);
       }
@@ -144,7 +137,7 @@ export function ImageSelectionDialog({
       setCustomSearchQuery("");
       setActiveSearchTerm(null);
     }
-  }, [isOpen, selectedKeyword, loadImages]); // Rely on loadImages useCallback dependencies
+  }, [isOpen, selectedKeyword]);
 
   const handleImageSelect = (image: PixabayImage) => {
     setSelectedImageUrl(image.webformatURL); 
@@ -214,41 +207,12 @@ export function ImageSelectionDialog({
             <ImageIcon /> 사진 추가 (Pixabay 이미지 검색)
           </DialogTitle>
           <DialogDescription>
-            블로그 항목 내용으로 검색어를 자동 완성하거나, 직접 키워드를 입력하여 이미지를 검색하세요. 
+            검색할 이미지 키워드를 직접 입력한 후 "검색" 버튼을 누르세요. 
             삽입할 사진과 위치를 선택한 후 "사진 삽입" 버튼을 누르세요.
             {activeSearchTerm && <span className="block mt-1">현재 "<span className="font-semibold text-primary">{activeSearchTerm}</span>" 관련 이미지 표시 중</span>}
           </DialogDescription>
         </DialogHeader>
         
-        {/* Section to select blog paragraph for search query */}
-        {blogSections.length > 0 && (
-          <div className="space-y-1 my-3">
-            <Label htmlFor="search-by-section-select" className="text-sm text-muted-foreground">또는 블로그 항목에서 검색어 가져오기:</Label>
-            <Select
-              onValueChange={(sectionId) => {
-                if (!sectionId) return;
-                const selectedSec = blogSections.find(s => s.id === sectionId);
-                if (selectedSec) {
-                  const queryFromName = selectedSec.name.replace(/ \.\.\.$/, ''); // Remove ellipsis for cleaner query
-                  setCustomSearchQuery(queryFromName);
-                  // Optionally auto-search: loadImages(queryFromName); 
-                }
-              }}
-            >
-              <SelectTrigger id="search-by-section-select" className="w-full bg-background text-foreground border-input text-sm">
-                <SelectValue placeholder="항목 선택하여 검색어 자동 입력..." />
-              </SelectTrigger>
-              <SelectContent className="bg-popover text-popover-foreground">
-                {blogSections.map((section, index) => (
-                  <SelectItem key={`search-sec-${section.id}`} value={section.id} className="hover:bg-accent/50 text-sm">
-                    {`항목 ${index + 1}: ${section.name}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
         {/* Custom search input and button */}
         <div className="flex items-center gap-2 my-4">
           <Input 
@@ -287,7 +251,7 @@ export function ImageSelectionDialog({
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>검색 시작</AlertTitle>
                     <AlertDescription>
-                    위 입력창에 키워드를 입력하고 검색 버튼을 누르거나, 블로그 항목을 선택하여 검색어를 자동으로 채워 검색하세요. 
+                    위 입력창에 키워드를 입력하고 검색 버튼을 누르세요. 
                     Pixabay API 키가 `.env` 파일에 `NEXT_PUBLIC_PIXABAY_API_KEY`로 설정되어 있어야 합니다.
                     </AlertDescription>
                 </Alert>
@@ -397,5 +361,4 @@ export function ImageSelectionDialog({
     </Dialog>
   );
 }
-
     
