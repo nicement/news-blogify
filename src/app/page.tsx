@@ -23,20 +23,117 @@ const getAiHintFromKeyword = (keyword: string | null): string => {
   return keyword.split(" ").slice(0, 2).join(" ");
 };
 
-const convertMarkdownImagesToHtml = (markdown: string, hintKeyword: string | null): string => {
-  const aiHint = getAiHintFromKeyword(hintKeyword);
-  return markdown.replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, src) => {
-    if (src.startsWith('data:image') || src.startsWith('http')) {
-         return `<img src="${src}" alt="${alt}" data-ai-hint="${aiHint}" style="max-width: 100%; height: auto; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />`;
-    }
-    return match;
+const convertMarkdownToHtml = (markdown: string, hintKeyword: string | null): string => {
+  let html = markdown;
+
+  // Block elements
+  // Headings H1-H6
+  html = html.replace(/^(#{1,6})\s+(.*)$/gm, (match, hashes, content) => {
+    const level = hashes.length;
+    return `<h${level}>${content.trim()}</h${level}>`;
   });
+  // Horizontal Rule
+  html = html.replace(/^(\*\*\*|---|___)\s*$/gm, "<hr />");
+
+  // Inline elements (order can matter)
+  // Images
+  const aiHint = getAiHintFromKeyword(hintKeyword);
+  html = html.replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, src) => {
+    if (src.startsWith('data:image') || src.startsWith('http')) {
+      return `<img src="${src}" alt="${alt || ''}" data-ai-hint="${aiHint}" style="max-width: 100%; height: auto; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />`;
+    }
+    return match; // Keep as is if not a valid image URL for conversion
+  });
+
+  // Links
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-accent hover:underline">$1</a>');
+  
+  // Bold (handles **text** and __text__)
+  html = html.replace(/(?:\*\*|__)(?=\S)(.+?)(?<=\S)(?:\*\*|__)/g, '<strong>$1</strong>');
+  
+  // Italic (handles *text* and _text_)
+  // Ensure this doesn't conflict with bold markers if they weren't fully consumed (e.g. ***text***)
+  // This simple regex will convert *text* to <em>text</em> after **text** is <strong>text</strong>.
+  // For ***text***, it would become *<strong>text</strong>* then <em><strong>text</strong></em>
+  html = html.replace(/(?:\*|_)(?=\S)(.+?)(?<=\S)(?:\*|_)/g, '<em>$1</em>');
+  
+  // Paragraphs:
+  // Process blocks of text separated by double newlines (or what's left between HTML block tags)
+  const blocks = html.split('\n');
+  let resultOutput = '';
+  let currentParagraphContent = '';
+
+  for (let i = 0; i < blocks.length; i++) {
+    const line = blocks[i];
+    const trimmedLine = line.trim();
+
+    if (trimmedLine.startsWith('<h') || trimmedLine.startsWith('<img') || trimmedLine.startsWith('<hr') || /<a[^>]*>/.test(trimmedLine) && /<\/a>/.test(trimmedLine)) { 
+      // If it's a line that's already a converted block/significant inline element
+      if (currentParagraphContent) {
+        resultOutput += `<p>${currentParagraphContent.trim().replace(/\n/g, '<br />')}</p>\n`;
+        currentParagraphContent = '';
+      }
+      resultOutput += line + '\n';
+    } else if (trimmedLine === '') { // Blank line signifies paragraph break
+      if (currentParagraphContent) {
+        resultOutput += `<p>${currentParagraphContent.trim().replace(/\n/g, '<br />')}</p>\n`;
+        currentParagraphContent = '';
+      }
+      resultOutput += '\n'; // Preserve blank line for separation between blocks
+    } else {
+      // Accumulate lines for the current paragraph
+      currentParagraphContent += (currentParagraphContent ? '\n' : '') + line;
+    }
+  }
+  // Add any remaining paragraph content
+  if (currentParagraphContent) {
+    resultOutput += `<p>${currentParagraphContent.trim().replace(/\n/g, '<br />')}</p>\n`;
+  }
+  
+  // Clean up excessive newlines, but try to preserve structure
+  html = resultOutput.replace(/\n\n\n+/g, '\n\n').trim();
+
+  return html;
 };
 
-const convertHtmlImagesToMarkdown = (html: string): string => {
-  return html.replace(/<img\s+(?:[^>]*?\s+)?src=["'](.*?)["']\s*(?:[^>]*?\s+)?alt=["'](.*?)["'](?:\s+[^>]*?)?(?:\/>|\s*\/?>)/gi, (match, src, alt) => {
-    return `![${alt}](${src})`;
+const convertHtmlToMarkdown = (html: string): string => {
+  let markdown = html;
+
+  // Convert <br /> to newlines first, as they affect paragraph processing
+  markdown = markdown.replace(/<br\s*\/?>/gi, '\n');
+
+  // Block elements
+  // Headings H1-H6
+  markdown = markdown.replace(/<h([1-6])[^>]*>(.*?)<\/h\1>/gi, (match, level, content) => {
+    return `${'#'.repeat(parseInt(level, 10))} ${content.trim()}`;
   });
+  // Horizontal Rule
+  markdown = markdown.replace(/<hr\s*\/?>/gi, '---');
+
+  // Inline elements
+  // Images - make sure alt text is captured correctly
+  markdown = markdown.replace(/<img\s+(?:[^>]*?\s+)?src=["'](.*?)["']\s*(?:[^>]*?\s+)?alt=["'](.*?)["'](?:[^>]*?)?(?:\/>|\s*\/?>)/gi, '![$2]($1)');
+  // Links
+  markdown = markdown.replace(/<a\s+(?:[^>]*?\s+)?href=["']([^"']*)["'][^>]*>(.*?)<\/a>/gi, '[$2]($1)');
+  // Bold
+  markdown = markdown.replace(/<(strong|b)>(.*?)<\/\1>/gi, '**$2**');
+  // Italic
+  markdown = markdown.replace(/<(em|i)>(.*?)<\/\1>/gi, '*$1*');
+
+  // Paragraphs: <p> tags are converted to text blocks separated by double newlines
+  // This should happen after inline elements within <p> are converted
+  markdown = markdown.replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n');
+  
+  // Strip any remaining HTML tags that weren't converted
+  // This is a basic strip and might be too aggressive for some cases
+  markdown = markdown.replace(/<\/?[^>]+(>|$)/g, '');
+
+  // Normalize multiple newlines to a maximum of two (for paragraph spacing)
+  // And clean up leading/trailing newlines from conversions
+  markdown = markdown.split('\n').map(line => line.trim()).filter(line => line.length > 0).join('\n\n');
+  markdown = markdown.replace(/\n{3,}/g, '\n\n');
+
+  return markdown.trim();
 };
 
 
@@ -81,11 +178,12 @@ export default function NewsBlogifyPage() {
     setBlogContent("");
     setSourceArticleTitleForDisplay(null); 
     if (contentFormat === 'html') {
-      setContentFormat('markdown');
+      // Always start with markdown from AI
+      setContentFormat('markdown'); 
     }
     try {
       const result = await generateBlogDraft({ articleUrl: keywordItem.articleUrl, keyword: keywordItem.keyword });
-      setBlogContent(result.draft);
+      setBlogContent(result.draft); // AI generates markdown
       setSourceArticleTitleForDisplay(result.sourceArticleTitle || keywordItem.keyword);
       toast({ title: "블로그 초안 생성 완료", description: `"${result.sourceArticleTitle || keywordItem.keyword}" 기사 기반 초안이 생성되었습니다. (실제 기사 내용은 플레이스홀더입니다.)`, variant: "default" });
     } catch (error) {
@@ -105,15 +203,17 @@ export default function NewsBlogifyPage() {
     setIsLoadingElaboration(true);
     
     let contentToElaborate = blogContent;
+    // Ensure AI gets Markdown
     if (contentFormat === 'html') {
-      contentToElaborate = convertHtmlImagesToMarkdown(blogContent);
+      contentToElaborate = convertHtmlToMarkdown(blogContent);
     }
 
     try {
       const result = await elaborateBlogContent({ draft: contentToElaborate });
-      let newContent = result.elaboratedContent;
+      let newContent = result.elaboratedContent; // AI returns Markdown
+      // Convert back to current format if it was HTML
       if (contentFormat === 'html') {
-        newContent = convertMarkdownImagesToHtml(newContent, selectedKeywordItem?.keyword || null);
+        newContent = convertMarkdownToHtml(newContent, selectedKeywordItem?.keyword || null);
       }
       setBlogContent(newContent);
       toast({ title: "상세 내용 생성 완료", description: "블로그 내용이 상세화되었습니다.", variant: "default" });
@@ -126,6 +226,7 @@ export default function NewsBlogifyPage() {
   };
 
   const handleImageInsert = (updatedContent: string) => {
+    // ImageSelectionDialog now inserts in the current format, so no conversion needed here usually
     setBlogContent(updatedContent);
     toast({ title: "사진 삽입 완료", description: "선택한 사진이 블로그 내용에 추가되었습니다." });
   };
@@ -133,11 +234,13 @@ export default function NewsBlogifyPage() {
   const handleFormatChange = useCallback((newFormat: ContentFormat) => {
     if (newFormat === contentFormat || isLoadingDraft || isLoadingElaboration) return;
 
-    if (newFormat === 'html') {
-      setBlogContent(prevContent => convertMarkdownImagesToHtml(prevContent, selectedKeywordItem?.keyword || null));
-    } else { 
-      setBlogContent(prevContent => convertHtmlImagesToMarkdown(prevContent));
-    }
+    setBlogContent(prevContent => {
+      if (newFormat === 'html') {
+        return convertMarkdownToHtml(prevContent, selectedKeywordItem?.keyword || null);
+      } else { 
+        return convertHtmlToMarkdown(prevContent);
+      }
+    });
     setContentFormat(newFormat);
   }, [contentFormat, selectedKeywordItem, isLoadingDraft, isLoadingElaboration]);
 
@@ -229,7 +332,7 @@ export default function NewsBlogifyPage() {
                     </a>
                   )}
                 </div>
-                <Button variant="link" className="p-1 h-auto text-sm text-accent mt-1 sm:mt-0 self-start sm:self-center flex-shrink-0" onClick={() => { setSelectedKeywordItem(null); setBlogContent(''); setKeywords([]); setSourceArticleTitleForDisplay(null); } }>다른 기사 선택</Button>
+                <Button variant="link" className="p-1 h-auto text-sm text-accent mt-1 sm:mt-0 self-start sm:self-center flex-shrink-0" onClick={() => { setSelectedKeywordItem(null); setBlogContent(''); setKeywords([]); setSourceArticleTitleForDisplay(null); if (contentFormat === 'html') setContentFormat('markdown'); } }>다른 기사 선택</Button>
               </CardDescription>
                {sourceArticleTitleForDisplay && (
                 <p className="text-sm text-muted-foreground">블로그 초안은 "<span className="font-medium">{sourceArticleTitleForDisplay}</span>" 기사를 기반으로 작성되었습니다.</p>
@@ -312,7 +415,7 @@ export default function NewsBlogifyPage() {
               <br/>
               "초안 생성" 시에도 선택된 기사의 URL로부터 실제 내용을 가져오는 스크래핑 로직이 <span className="font-semibold text-destructive">src/ai/flows/generate-blog-draft.ts</span>에 필요합니다. 현재 이 부분들도 플레이스홀더 데이터로 동작합니다.
               <br/>
-              "상세 내용 만들기"는 AI를 사용하여 현재 초안을 더 풍부하게 만듭니다. "사진 추가"를 통해 내용에 이미지를 삽입할 수 있습니다. (현재는 Placeholder 이미지만 제공됩니다.)
+              "상세 내용 만들기"는 AI를 사용하여 현재 초안을 더 풍부하게 만듭니다. "사진 추가"를 통해 내용에 이미지를 삽입할 수 있습니다. (Pixabay API 키를 .env 파일에 설정해야 합니다.)
             </AlertDescription>
           </Alert>
       </main>
@@ -332,3 +435,4 @@ export default function NewsBlogifyPage() {
     </div>
   );
 }
+
