@@ -29,7 +29,7 @@ const generateBlogDraftPrompt = ai.definePrompt({
   name: 'generateBlogDraftPrompt',
   input: {schema: GenerateBlogDraftInputSchema},
   output: {schema: GenerateBlogDraftOutputSchema},
-  prompt: `You are an expert blog writer. Please generate a blog post draft based on the following keyword: {{{keyword}}}. The blog post should be well-structured and engaging.`, 
+  prompt: `You are an expert blog writer. Please generate a blog post draft in Korean based on the following keyword: {{{keyword}}}. The blog post should be well-structured and engaging.`,
 });
 
 const generateBlogDraftFlow = ai.defineFlow(

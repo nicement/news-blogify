@@ -28,7 +28,7 @@ const prompt = ai.definePrompt({
   name: 'elaborateBlogContentPrompt',
   input: {schema: ElaborateBlogContentInputSchema},
   output: {schema: ElaborateBlogContentOutputSchema},
-  prompt: `You are an expert blog writer. Please elaborate on the following draft blog post to make it more detailed and engaging:\n\n{{{draft}}}`,
+  prompt: `You are an expert blog writer. Please elaborate on the following draft blog post in Korean to make it more detailed and engaging:\n\n{{{draft}}}`,
 });
 
 const elaborateBlogContentFlow = ai.defineFlow(
