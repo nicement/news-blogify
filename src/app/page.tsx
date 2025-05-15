@@ -9,18 +9,23 @@ import { useToast } from "@/hooks/use-toast";
 import { generateBlogDraft } from "@/ai/flows/generate-blog-draft";
 import { elaborateBlogContent } from "@/ai/flows/elaborate-blog-content";
 import { ImageSelectionDialog } from "@/components/ImageSelectionDialog";
-import { Loader2, Newspaper, Brain, Sparkles, ImagePlus, Edit3, Bot } from "lucide-react";
+import { Loader2, Newspaper, Brain, Sparkles, ImagePlus, Edit3, Bot, FileText, Code } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const MOCK_KEYWORDS = [
   "부동산 시장", "AI 발전", "저출산 문제", "K-POP 인기", "주식 투자", 
   "전기차 확대", "기후 변화", "청년 취업", "반도체 경쟁", "OTT 성장"
 ];
 
+export type ContentFormat = 'markdown' | 'html';
+
 export default function NewsBlogifyPage() {
   const [keywords, setKeywords] = useState<string[]>([]);
   const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
   const [blogContent, setBlogContent] = useState<string>("");
+  const [contentFormat, setContentFormat] = useState<ContentFormat>('markdown');
   
   const [isLoadingKeywords, setIsLoadingKeywords] = useState<boolean>(false);
   const [isLoadingDraft, setIsLoadingDraft] = useState<boolean>(false);
@@ -145,6 +150,30 @@ export default function NewsBlogifyPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex items-center space-x-4 mb-4">
+                <Label htmlFor="content-format" className="text-base">콘텐츠 형식:</Label>
+                <RadioGroup
+                  id="content-format"
+                  orientation="horizontal"
+                  value={contentFormat}
+                  onValueChange={(value: string) => setContentFormat(value as ContentFormat)}
+                  className="flex items-center"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="markdown" id="format-markdown" />
+                    <Label htmlFor="format-markdown" className="flex items-center gap-1 cursor-pointer">
+                      <FileText size={18} /> 마크다운
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="html" id="format-html" />
+                    <Label htmlFor="format-html" className="flex items-center gap-1 cursor-pointer">
+                      <Code size={18} /> HTML
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
               {isLoadingDraft ? (
                 <div className="flex flex-col justify-center items-center h-60 border border-dashed rounded-md">
                   <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -189,7 +218,7 @@ export default function NewsBlogifyPage() {
             <Bot className="h-5 w-5 text-primary" />
             <AlertTitle className="font-semibold text-primary">AI 지원 기능</AlertTitle>
             <AlertDescription className="text-muted-foreground">
-              "상세 내용 만들기"는 AI를 사용하여 현재 초안을 더 풍부하게 만듭니다. "사진 추가"를 통해 내용에 이미지를 삽입할 수 있습니다. (현재는 Placeholder 이미지만 제공됩니다.)
+              "상세 내용 만들기"는 AI를 사용하여 현재 초안을 더 풍부하게 만듭니다. "사진 추가"를 통해 내용에 이미지를 삽입할 수 있습니다. 선택한 콘텐츠 형식(마크다운/HTML)에 따라 이미지 태그가 다르게 삽입됩니다. (현재는 Placeholder 이미지만 제공됩니다.)
             </AlertDescription>
           </Alert>
       </main>
@@ -200,6 +229,7 @@ export default function NewsBlogifyPage() {
         currentContent={blogContent}
         onImageInsert={handleImageInsert}
         selectedKeyword={selectedKeyword}
+        contentFormat={contentFormat}
       />
 
       <footer className="mt-12 text-center text-muted-foreground text-sm">

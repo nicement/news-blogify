@@ -24,6 +24,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
 import { AlertCircle, CheckCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import type { ContentFormat } from "@/app/page"; // Import ContentFormat
 
 interface ImageSelectionDialogProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ interface ImageSelectionDialogProps {
   currentContent: string;
   onImageInsert: (updatedContent: string) => void;
   selectedKeyword: string | null;
+  contentFormat: ContentFormat; // Added contentFormat prop
 }
 
 const MOCK_IMAGES_COUNT = 6;
@@ -41,6 +43,7 @@ export function ImageSelectionDialog({
   currentContent,
   onImageInsert,
   selectedKeyword,
+  contentFormat, // Destructure contentFormat
 }: ImageSelectionDialogProps) {
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [selectedSectionIndex, setSelectedSectionIndex] = useState<string | undefined>(undefined); // Store index as string for Select
@@ -55,19 +58,22 @@ export function ImageSelectionDialog({
     }));
   }, [currentContent]);
 
+  const aiHint = useMemo(() => selectedKeyword ? selectedKeyword.split(" ").slice(0, 2).join(" ") : "relevant image", [selectedKeyword]);
+
   const placeholderImages = useMemo(() => {
     return Array.from({ length: MOCK_IMAGES_COUNT }, (_, i) => {
       const size = 300 + i * 20; // Vary image sizes slightly
       return {
         src: `https://placehold.co/${size}x${size}.png`,
         alt: `Placeholder image ${i + 1}`,
+        aiHint: aiHint // Each image will carry the general aiHint
       };
     });
-  }, []);
+  }, [aiHint]);
+
 
   const handleInsert = () => {
     if (!selectedImageUrl || selectedSectionIndex === undefined) {
-      // This case should be prevented by disabling the button
       return;
     }
 
@@ -75,12 +81,20 @@ export function ImageSelectionDialog({
     if (isNaN(sectionIdx) || sectionIdx < 0 || sectionIdx >= blogSections.length) {
       return; 
     }
+    
+    const altText = selectedKeyword || "image";
+    let imageTag = "";
 
-    const imageMarkdown = `\n\n![${selectedKeyword || "image"}](${selectedImageUrl})\n\n`;
+    if (contentFormat === 'html') {
+      imageTag = `\n\n<img src="${selectedImageUrl}" alt="${altText}" data-ai-hint="${aiHint}" style="max-width: 100%; height: auto; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />\n\n`;
+    } else { // Default to markdown
+      imageTag = `\n\n![${altText}](${selectedImageUrl})\n\n`;
+    }
     
     const updatedSections = blogSections.map((section, index) => {
       if (index === sectionIdx) {
-        return section.originalContent + imageMarkdown;
+        // Insert image at the end of the selected paragraph
+        return section.originalContent + imageTag;
       }
       return section.originalContent;
     });
@@ -91,7 +105,6 @@ export function ImageSelectionDialog({
     onClose();
   };
 
-  const aiHint = selectedKeyword ? selectedKeyword.split(" ").slice(0, 2).join(" ") : "relevant image";
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -99,7 +112,8 @@ export function ImageSelectionDialog({
         <DialogHeader>
           <DialogTitle>사진 추가 (Add Photo)</DialogTitle>
           <DialogDescription>
-            항목에 추가할 사진을 선택하고, 사진을 삽입할 위치를 지정해주세요.
+            항목에 추가할 사진을 선택하고, 사진을 삽입할 위치를 지정해주세요. 
+            선택한 형식({contentFormat === 'html' ? 'HTML' : '마크다운'})으로 사진이 삽입됩니다.
           </DialogDescription>
         </DialogHeader>
         
@@ -111,7 +125,7 @@ export function ImageSelectionDialog({
                   key={index}
                   className="cursor-pointer border-2 border-transparent hover:border-primary rounded-lg overflow-hidden shadow-md transition-all duration-200"
                   onClick={() => setSelectedImageUrl(img.src)}
-                  data-ai-hint={aiHint}
+                  data-ai-hint={img.aiHint}
                 >
                   <Image
                     src={img.src}
@@ -186,7 +200,7 @@ export function ImageSelectionDialog({
               disabled={!selectedImageUrl || selectedSectionIndex === undefined || blogSections.length === 0}
               className="bg-primary hover:bg-primary/90 text-primary-foreground"
             >
-              사진 삽입
+              사진 삽입 ({contentFormat === 'html' ? 'HTML' : '마크다운'})
             </Button>
           </div>
         </DialogFooter>
