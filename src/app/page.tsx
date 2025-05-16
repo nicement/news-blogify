@@ -200,7 +200,7 @@ export default function NewsBlogifyPage() {
 
 
     try {
-      const result = await fetchNaverNewsKeywords({ categoryId });
+      const result = await fetchNaverNewsKeywords({ categoryId } as FetchNaverNewsKeywordsInput);
       if (result.keywords && result.keywords.length > 0) {
         setKeywords(result.keywords);
         toast({
@@ -413,7 +413,7 @@ export default function NewsBlogifyPage() {
                 <div className="space-y-2">
                   {keywords.map((kwItem) => (
                     <Button
-                      key={kwItem.articleUrl}
+                      key={`${kwItem.articleUrl}-${kwItem.rank}`}
                       variant="outline"
                       className="w-full justify-start p-4 h-auto text-base border-primary/50 hover:bg-primary/10 hover:text-primary transition-all duration-200 text-left"
                       onClick={() => handleKeywordSelect(kwItem)}
