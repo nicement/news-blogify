@@ -77,23 +77,21 @@ const fetchNaverNewsKeywordsFlow = ai.defineFlow(
       // You MUST inspect the current HTML structure of Naver's ranking page to find the correct selectors.
       // Look for elements containing the ranking, title, and link of each news item.
       $("a.list_title").each((index: number, element: Element) => {
-        if (keywordsData.length < 10) {
-          // Limiting to top 10 for example
-          const title = $(element).text().trim();
-          let url = $(element).attr("href");
+        // Removed the limit: if (keywordsData.length < 10)
+        const title = $(element).text().trim();
+        let url = $(element).attr("href");
 
-          if (title && url) {
-            // Ensure URL is absolute
-            if (!url.startsWith("http")) {
-              const urlObj = new URL(NAVER_NEWS_RANKING_URL);
-              url = `${urlObj.protocol}//${urlObj.hostname}${url}`;
-            }
-            keywordsData.push({
-              rank: index + 1, // Or extract rank if available directly
-              keyword: title,
-              articleUrl: url,
-            });
+        if (title && url) {
+          // Ensure URL is absolute
+          if (!url.startsWith("http")) {
+            const urlObj = new URL(NAVER_NEWS_RANKING_URL);
+            url = `${urlObj.protocol}//${urlObj.hostname}${url}`;
           }
+          keywordsData.push({
+            rank: index + 1, // Or extract rank if available directly
+            keyword: title,
+            articleUrl: url,
+          });
         }
       });
 

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -213,11 +214,11 @@ export default function NewsBlogifyPage() {
     try {
       const result = await fetchNaverNewsKeywords();
       if (result.keywords && result.keywords.length > 0) {
-        setKeywords(result.keywords.slice(0, 10));
+        setKeywords(result.keywords); // Removed .slice(0, 10)
         toast({
           title: "키워드 로드 완료",
           description: `네이버 뉴스 랭킹 키워드 ${
-            result.keywords.slice(0, 10).length
+            result.keywords.length // Updated to reflect actual count
           }개가 로드되었습니다.`,
         });
       } else {
