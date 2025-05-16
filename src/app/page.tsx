@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { generateBlogDraft } from "@/ai/flows/generate-blog-draft";
-import type { NaverNewsKeywordItem } from "@/ai/flows/fetch-naver-news-keywords";
+import type { NaverNewsKeywordItem, FetchNaverNewsKeywordsInput } from "@/ai/flows/fetch-naver-news-keywords";
 import { fetchNaverNewsKeywords } from "@/ai/flows/fetch-naver-news-keywords";
 import { elaborateBlogContent } from "@/ai/flows/elaborate-blog-content";
 import { ImageSelectionDialog } from "@/components/ImageSelectionDialog";
@@ -29,12 +29,22 @@ import {
   FileText,
   Code,
   ExternalLink,
+  ChevronRight,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 export type ContentFormat = "markdown" | "html";
+
+const newsCategories = [
+  { name: "정치", id: "100" },
+  { name: "경제", id: "101" },
+  { name: "사회", id: "102" },
+  { name: "생활/문화", id: "103" },
+  { name: "IT/과학", id: "105" },
+  { name: "세계", id: "104" },
+];
 
 const getAiHintFromKeyword = (keyword: string | null): string => {
   if (!keyword) return "image";
@@ -65,7 +75,7 @@ const convertMarkdownToHtml = (
         alt || ""
       }" data-ai-hint="${aiHint}" style="max-width: 100%; height: auto; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />`;
     }
-    return match; // Keep as is if not a valid image URL for conversion
+    return match; 
   });
 
   // Links
@@ -81,13 +91,8 @@ const convertMarkdownToHtml = (
   );
 
   // Italic (handles *text* and _text_)
-  // Ensure this doesn't conflict with bold markers if they weren't fully consumed (e.g. ***text***)
-  // This simple regex will convert *text* to <em>text</em> after **text** is <strong>text</strong>.
-  // For ***text***, it would become *<strong>text</strong>* then <em><strong>text</strong></em>
   html = html.replace(/(?:\*|_)(?=\S)(.+?)(?<=\S)(?:\*|_)/g, "<em>$1</em>");
 
-  // Paragraphs:
-  // Process blocks of text separated by double newlines (or what's left between HTML block tags)
   const blocks = html.split("\n");
   let resultOutput = "";
   let currentParagraphContent = "";
@@ -102,7 +107,6 @@ const convertMarkdownToHtml = (
       trimmedLine.startsWith("<hr") ||
       (/<a[^>]*>/.test(trimmedLine) && /<\/a>/.test(trimmedLine))
     ) {
-      // If it's a line that's already a converted block/significant inline element
       if (currentParagraphContent) {
         resultOutput += `<p>${currentParagraphContent
           .trim()
@@ -111,82 +115,54 @@ const convertMarkdownToHtml = (
       }
       resultOutput += line + "\n";
     } else if (trimmedLine === "") {
-      // Blank line signifies paragraph break
       if (currentParagraphContent) {
         resultOutput += `<p>${currentParagraphContent
           .trim()
           .replace(/\n/g, "<br />")}</p>\n`;
         currentParagraphContent = "";
       }
-      resultOutput += "\n"; // Preserve blank line for separation between blocks
+      resultOutput += "\n"; 
     } else {
-      // Accumulate lines for the current paragraph
       currentParagraphContent += (currentParagraphContent ? "\n" : "") + line;
     }
   }
-  // Add any remaining paragraph content
   if (currentParagraphContent) {
     resultOutput += `<p>${currentParagraphContent
       .trim()
       .replace(/\n/g, "<br />")}</p>\n`;
   }
-
-  // Clean up excessive newlines, but try to preserve structure
   html = resultOutput.replace(/\n\n\n+/g, "\n\n").trim();
-
   return html;
 };
 
 const convertHtmlToMarkdown = (html: string): string => {
   let markdown = html;
-
-  // Convert <br /> to newlines first, as they affect paragraph processing
   markdown = markdown.replace(/<br\s*\/?>/gi, "\n");
-
-  // Block elements
-  // Headings H1-H6
   markdown = markdown.replace(
     /<h([1-6])[^>]*>(.*?)<\/h\1>/gi,
     (match, level, content) => {
       return `${"#".repeat(parseInt(level, 10))} ${content.trim()}`;
     }
   );
-  // Horizontal Rule
   markdown = markdown.replace(/<hr\s*\/?>/gi, "---");
-
-  // Inline elements
-  // Images - make sure alt text is captured correctly
   markdown = markdown.replace(
     /<img\s+(?:[^>]*?\s+)?src=["'](.*?)["']\s*(?:[^>]*?\s+)?alt=["'](.*?)["'](?:[^>]*?)?(?:\/>|\s*\/?>)/gi,
     "![$2]($1)"
   );
-  // Links
   markdown = markdown.replace(
     /<a\s+(?:[^>]*?\s+)?href=["']([^"']*)["'][^>]*>(.*?)<\/a>/gi,
     "[$2]($1)"
   );
-  // Bold
   markdown = markdown.replace(/<(strong|b)>(.*?)<\/\1>/gi, "**$2**");
-  // Italic
   markdown = markdown.replace(/<(em|i)>(.*?)<\/\1>/gi, "*$1*");
-
-  // Paragraphs: <p> tags are converted to text blocks separated by double newlines
-  // This should happen after inline elements within <p> are converted
   markdown = markdown.replace(/<p[^>]*>(.*?)<\/p>/gi, "$1\n\n");
-
-  // Strip any remaining HTML tags that weren't converted
-  // This is a basic strip and might be too aggressive for some cases
   markdown = markdown.replace(/<\/?[^>]+(>|$)/g, "");
-
-  // Normalize multiple newlines to a maximum of two (for paragraph spacing)
-  // And clean up leading/trailing newlines from conversions
   markdown = markdown
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .join("\n\n");
   markdown = markdown.replace(/\n{3,}/g, "\n\n");
-
   return markdown.trim();
 };
 
@@ -201,44 +177,57 @@ export default function NewsBlogifyPage() {
   const [isLoadingDraft, setIsLoadingDraft] = useState<boolean>(false);
   const [isLoadingElaboration, setIsLoadingElaboration] =
     useState<boolean>(false);
+  
+  const [currentLoadingCategory, setCurrentLoadingCategory] = useState<string | null>(null);
+
 
   const [showImageDialog, setShowImageDialog] = useState<boolean>(false);
   const [sourceArticleTitleForDisplay, setSourceArticleTitleForDisplay] =
     useState<string | null>(null);
+  const [currentCategoryName, setCurrentCategoryName] = useState<string | null>(null);
+
 
   const { toast } = useToast();
 
-  const handleFetchKeywords = async () => {
+  const handleFetchKeywords = async (categoryId: string, categoryName: string) => {
     setIsLoadingKeywords(true);
+    setCurrentLoadingCategory(categoryName);
     setKeywords([]);
+    setSelectedKeywordItem(null); // Clear previous selection when fetching new category
+    setBlogContent(""); // Clear blog content
+    setSourceArticleTitleForDisplay(null);
+    setCurrentCategoryName(categoryName);
+
+
     try {
-      const result = await fetchNaverNewsKeywords();
+      const result = await fetchNaverNewsKeywords({ categoryId });
       if (result.keywords && result.keywords.length > 0) {
-        setKeywords(result.keywords); // Removed .slice(0, 10)
+        setKeywords(result.keywords);
         toast({
-          title: "키워드 로드 완료",
-          description: `네이버 뉴스 랭킹 키워드 ${
-            result.keywords.length // Updated to reflect actual count
+          title: `${categoryName} 키워드 로드 완료`,
+          description: `네이버 뉴스 ${categoryName} 랭킹 키워드 ${
+            result.keywords.length
           }개가 로드되었습니다.`,
         });
       } else {
         toast({
           title: "키워드 없음",
           description:
-            "네이버 뉴스에서 키워드를 가져오지 못했습니다. 스크래핑 로직을 확인하거나 잠시 후 다시 시도해주세요.",
+            `네이버 뉴스 ${categoryName} 분야에서 키워드를 가져오지 못했습니다. 스크래핑 로직을 확인하거나 잠시 후 다시 시도해주세요.`,
           variant: "destructive",
         });
       }
     } catch (error) {
-      console.error("Error fetching Naver news keywords:", error);
+      console.error(`Error fetching Naver news keywords for category ${categoryName}:`, error);
       toast({
         title: "오류 발생",
         description:
-          "키워드 로드 중 오류가 발생했습니다. 서버 측 스크래핑 로직을 확인해주세요.",
+          `${categoryName} 키워드 로드 중 오류가 발생했습니다. 서버 측 스크래핑 로직을 확인해주세요.`,
         variant: "destructive",
       });
     } finally {
       setIsLoadingKeywords(false);
+      setCurrentLoadingCategory(null);
     }
   };
 
@@ -248,7 +237,6 @@ export default function NewsBlogifyPage() {
     setBlogContent("");
     setSourceArticleTitleForDisplay(null);
     if (contentFormat === "html") {
-      // Always start with markdown from AI
       setContentFormat("markdown");
     }
     try {
@@ -256,7 +244,7 @@ export default function NewsBlogifyPage() {
         articleUrl: keywordItem.articleUrl,
         keyword: keywordItem.keyword,
       });
-      setBlogContent(result.draft); // AI generates markdown
+      setBlogContent(result.draft); 
       setSourceArticleTitleForDisplay(
         result.sourceArticleTitle || keywordItem.keyword
       );
@@ -295,15 +283,13 @@ export default function NewsBlogifyPage() {
     setIsLoadingElaboration(true);
 
     let contentToElaborate = blogContent;
-    // Ensure AI gets Markdown
     if (contentFormat === "html") {
       contentToElaborate = convertHtmlToMarkdown(blogContent);
     }
 
     try {
       const result = await elaborateBlogContent({ draft: contentToElaborate });
-      let newContent = result.elaboratedContent; // AI returns Markdown
-      // Convert back to current format if it was HTML
+      let newContent = result.elaboratedContent; 
       if (contentFormat === "html") {
         newContent = convertMarkdownToHtml(
           newContent,
@@ -329,7 +315,6 @@ export default function NewsBlogifyPage() {
   };
 
   const handleImageInsert = (updatedContent: string) => {
-    // ImageSelectionDialog now inserts in the current format, so no conversion needed here usually
     setBlogContent(updatedContent);
     toast({
       title: "사진 삽입 완료",
@@ -375,32 +360,56 @@ export default function NewsBlogifyPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-2xl">
                 <Newspaper className="text-primary" />
-                오늘의 네이버 뉴스 랭킹 키워드
+                {currentCategoryName ? `${currentCategoryName} 뉴스 랭킹 키워드` : "뉴스 분야 선택"}
               </CardTitle>
               <CardDescription>
-                가장 인기있는 뉴스 키워드(기사 제목)를 확인하고 블로그 작성을
-                시작하세요. 선택한 기사 원문을 기반으로 초안이 작성됩니다.
+                {currentCategoryName
+                  ? `선택된 "${currentCategoryName}" 분야의 인기 뉴스 키워드(기사 제목)입니다. 키워드를 선택하여 블로그 초안 작성을 시작하세요.`
+                  : "관심있는 뉴스 분야를 선택하여 랭킹 키워드를 확인하고 블로그 작성을 시작하세요."}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {keywords.length === 0 && !isLoadingKeywords && (
-                <Button
-                  onClick={handleFetchKeywords}
-                  className="w-full text-lg py-6 bg-accent hover:bg-accent/90 text-accent-foreground"
-                >
-                  <Sparkles className="mr-2" />
-                  네이버 뉴스 랭킹 키워드 불러오기
-                </Button>
+                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {newsCategories.map((category) => (
+                    <Button
+                        key={category.id}
+                        onClick={() => handleFetchKeywords(category.id, category.name)}
+                        className="w-full text-md py-5 bg-accent hover:bg-accent/90 text-accent-foreground flex items-center justify-center"
+                        disabled={isLoadingKeywords}
+                    >
+                        {isLoadingKeywords && currentLoadingCategory === category.name ? (
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        ) : (
+                        <Sparkles className="mr-2 h-5 w-5" />
+                        )}
+                        {category.name}
+                    </Button>
+                    ))}
+                </div>
               )}
-              {isLoadingKeywords && (
+              {isLoadingKeywords && currentLoadingCategory &&(
                 <div className="flex justify-center items-center h-20">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                   <p className="ml-2 text-muted-foreground">
-                    키워드를 불러오는 중...
+                    {currentLoadingCategory} 분야 키워드를 불러오는 중...
                   </p>
                 </div>
               )}
               {keywords.length > 0 && (
+                <>
+                <Button 
+                    variant="outline" 
+                    onClick={() => {
+                        setKeywords([]); 
+                        setCurrentCategoryName(null);
+                        setSelectedKeywordItem(null);
+                    }} 
+                    className="mb-4 w-full sm:w-auto"
+                    disabled={isLoadingKeywords}
+                >
+                    다른 분야 선택하기
+                </Button>
                 <div className="space-y-2">
                   {keywords.map((kwItem) => (
                     <Button
@@ -429,6 +438,7 @@ export default function NewsBlogifyPage() {
                     </Button>
                   ))}
                 </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -466,7 +476,7 @@ export default function NewsBlogifyPage() {
                   onClick={() => {
                     setSelectedKeywordItem(null);
                     setBlogContent("");
-                    setKeywords([]);
+                    // setKeywords([]); // Keep keywords if user wants to select another from same category
                     setSourceArticleTitleForDisplay(null);
                     if (contentFormat === "html") setContentFormat("markdown");
                   }}
@@ -474,6 +484,11 @@ export default function NewsBlogifyPage() {
                   다른 기사 선택
                 </Button>
               </CardDescription>
+              {currentCategoryName && (
+                 <p className="text-sm text-muted-foreground">
+                    현재 "<span className="font-medium">{currentCategoryName}</span>" 분야의 기사로 작업 중입니다.
+                  </p>
+              )}
               {sourceArticleTitleForDisplay && (
                 <p className="text-sm text-muted-foreground">
                   블로그 초안은 "
@@ -578,7 +593,7 @@ export default function NewsBlogifyPage() {
           <AlertDescription className="text-muted-foreground">
             "상세 내용 만들기"는 AI를 사용하여 현재 초안을 더 풍부하게 만듭니다.
             "사진 추가"를 통해 내용에 이미지를 삽입할 수 있습니다. (Pixabay API
-            키를 .env 파일에 설정해야 합니다.)
+            키를 .env 파일에 설정해야 합니다.) 네이버 뉴스 스크래핑은 실제 환경 및 네이버의 정책에 따라 작동하지 않을 수 있습니다.
           </AlertDescription>
         </Alert>
       </main>
@@ -588,7 +603,7 @@ export default function NewsBlogifyPage() {
         onClose={() => setShowImageDialog(false)}
         currentContent={blogContent}
         onImageInsert={handleImageInsert}
-        selectedKeyword={selectedKeywordItem?.keyword || null}
+        selectedKeyword={selectedKeywordItem?.keyword || currentCategoryName || null}
         contentFormat={contentFormat}
       />
 
