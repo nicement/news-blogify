@@ -16,7 +16,7 @@ import { ai } from "@/ai/genkit";
 import { z } from "genkit";
 
 const NAVER_NEWS_BASE_URL =
-  "https://news.naver.com/main/ranking/popularDay.naver";
+  "https://news.naver.com/section";
 
 const FetchNaverNewsKeywordsInputSchema = z.object({
   categoryId: z.string().describe("The category ID (sid1) for Naver News, e.g., '100' for Politics."),
@@ -53,7 +53,7 @@ const fetchNaverNewsKeywordsFlow = ai.defineFlow(
   },
   async (input) => {
     const { categoryId } = input;
-    const targetUrl = `${NAVER_NEWS_BASE_URL}?mid=etc&sid1=${categoryId}`;
+    const targetUrl = `${NAVER_NEWS_BASE_URL}/${categoryId}`;
     
     console.log(`Attempting to fetch keywords from: ${targetUrl} for category ID: ${categoryId}`);
 
@@ -71,11 +71,11 @@ const fetchNaverNewsKeywordsFlow = ai.defineFlow(
         responseType: "arraybuffer",
       });
 
-      const html = iconv.decode(data, "euc-kr");
+      const html = iconv.decode(data, "utf-8");
       const $ = cheerio.load(html);
 
       const keywordsData: NaverNewsKeywordItem[] = [];
-      $("a.list_title").each((index: number, element: Element) => {
+      $("a.sa_text_title").each((index: number, element: Element) => {
         const title = $(element).text().trim();
         let url = $(element).attr("href");
 
