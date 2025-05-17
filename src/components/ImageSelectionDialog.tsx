@@ -116,15 +116,9 @@ export function ImageSelectionDialog({
     if (isOpen) {
       const initialQuery = selectedKeyword || "";
       setCustomSearchQuery(initialQuery); 
-      // Reset previous search results when dialog opens with a new keyword or no keyword
       setFetchedImages([]);
       setActiveSearchTerm(null); 
-      // User must click search button, auto-search on open is disabled.
-      // if (initialQuery.trim() !== "") {
-      //   loadImages(initialQuery); 
-      // }
     } else {
-      // Reset states when dialog closes
       setFetchedImages([]);
       setSelectedImageUrl(null);
       setSelectedSectionIndex(undefined);
@@ -132,10 +126,10 @@ export function ImageSelectionDialog({
       setCustomSearchQuery("");
       setActiveSearchTerm(null);
     }
-  }, [isOpen, selectedKeyword]); // loadImages removed from dep array as it's manually called
+  }, [isOpen, selectedKeyword]);
 
   const handleImageSelect = (image: PixabayImage) => {
-    setSelectedImageUrl(image.webformatURL); 
+    setSelectedImageUrl(image.largeImageURL || image.webformatURL); // Use largeImageURL first
     setSelectedImageAlt(image.tags || activeSearchTerm || "selected image");
   };
 
@@ -352,4 +346,6 @@ export function ImageSelectionDialog({
     </Dialog>
   );
 }
+    
+
     
