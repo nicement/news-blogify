@@ -197,6 +197,7 @@ export default function NewsBlogifyPage() {
     setSelectedKeywordItem(null);
     setUserCustomKeywords("");
     resetEditorState();
+    setCurrentCategoryName(null); // Reset category name when changing mode
   };
 
   const handleFetchKeywords = async (categoryId: string, categoryName: string) => {
@@ -497,6 +498,26 @@ export default function NewsBlogifyPage() {
             </>
           )}
         </CardContent>
+        <CardFooter className="pt-6">
+          {keywords.length === 0 && !isLoadingKeywords && ( // Category selection view
+            <Button
+              variant="ghost"
+              onClick={() => handleModeSelection(null)}
+              className="w-full sm:w-auto text-sm text-muted-foreground hover:text-accent"
+            >
+              <ChevronLeft className="mr-1" /> 뒤로 (모드 선택)
+            </Button>
+          )}
+          {keywords.length > 0 && ( // Keyword list view
+            <Button
+              variant="ghost"
+              onClick={() => handleModeSelection(null)}
+              className="w-full sm:w-auto text-sm text-muted-foreground hover:text-accent"
+            >
+              <ChevronLeft className="mr-1" /> 뒤로 (모드 선택)
+            </Button>
+          )}
+        </CardFooter>
       </Card>
     );
   };
@@ -536,6 +557,15 @@ export default function NewsBlogifyPage() {
             블로그 초안 생성 (AI)
           </Button>
         </CardContent>
+        <CardFooter className="pt-6">
+          <Button
+            variant="ghost"
+            onClick={() => handleModeSelection(null)}
+            className="w-full sm:w-auto text-sm text-muted-foreground hover:text-accent"
+          >
+            <ChevronLeft className="mr-1" /> 뒤로 (모드 선택)
+          </Button>
+        </CardFooter>
       </Card>
     );
   };
@@ -720,26 +750,17 @@ export default function NewsBlogifyPage() {
 
       <main className="w-full max-w-4xl space-y-8">
         {currentMode === null && renderModeSelection()}
-        {currentMode === 'news' && !selectedKeywordItem && renderNewsKeywordSelection()}
-        {currentMode === 'news' && selectedKeywordItem && !blogContent && isLoadingDraft && renderBlogEditor()}
-        {currentMode === 'news' && selectedKeywordItem && blogContent && renderBlogEditor()}
-
-        {currentMode === 'customKeyword' && !blogContent && renderCustomKeywordInput()}
-        {currentMode === 'customKeyword' && blogContent && renderBlogEditor()}
         
-        {/* Fallback for loading state when content is being generated for custom keywords */}
-        {currentMode === 'customKeyword' && !blogContent && isLoadingDraft && (
-            <div className="flex flex-col justify-center items-center h-60 border border-dashed rounded-md">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                <p className="mt-4 text-lg text-muted-foreground">
-                "{userCustomKeywords}" 기반 초안 생성 중...
-                </p>
-                <p className="text-sm text-muted-foreground">
-                (AI가 처리하는 중입니다...)
-                </p>
-            </div>
-        )}
-
+        {currentMode === 'news' && !selectedKeywordItem && renderNewsKeywordSelection()}
+        
+        {/* Editor rendering for 'news' mode */}
+        {currentMode === 'news' && selectedKeywordItem && (isLoadingDraft || blogContent) && renderBlogEditor()}
+        
+        {currentMode === 'customKeyword' && !blogContent && !isLoadingDraft && renderCustomKeywordInput()}
+        
+        {/* Editor or loading state rendering for 'customKeyword' mode */}
+        {currentMode === 'customKeyword' && (isLoadingDraft || blogContent) && renderBlogEditor()}
+        
 
         <Alert className="mt-8 bg-secondary/50 border-primary/30">
           <Bot className="h-5 w-5 text-primary" />
@@ -776,4 +797,3 @@ export default function NewsBlogifyPage() {
     </div>
   );
 }
-

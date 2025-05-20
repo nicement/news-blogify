@@ -42,6 +42,7 @@ const generateBlogTitleFromCustomKeywordsPrompt = ai.definePrompt({
   input: { schema: GenerateBlogFromCustomKeywordsInputSchema },
   output: { schema: z.object({ blogTitle: z.string() }) },
   prompt: `사용자가 제공한 다음 키워드를 기반으로 SEO 친화적이고 독자의 관심을 끌 만한 한국어 블로그 게시물 제목을 1개 생성해주세요. 제목은 주요 키워드를 포함하고 간결해야 합니다.
+단, AI가 쓴 것처럼 기계적이지 않고, 사람이 자신의 경험과 생각을 담아 쓴 것처럼 자연스럽고 진정성 있게 작성해줘. 너무 정제되지 않고, 말하듯이 편안한 문체를 사용하고, 필요하다면 개인적인 사례나 감정을 담아줘. 너무 딱딱하거나 정보 나열식이 되지 않도록 주의하고, 읽는 사람이 공감할 수 있게 써줘.
 
 키워드:
 {{{customKeywords}}}
